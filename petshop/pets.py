@@ -10,7 +10,10 @@ bp = Blueprint("pets", "pets", url_prefix="")
 
 def format_date(d):
     if d:
-        d = datetime.datetime.strptime(d, '%Y-%m-%d')
+        if d==1:
+            d=datetime.datetime.now()
+        else:
+            d = datetime.datetime.strptime(d, '%Y-%m-%d')
         v = d.strftime("%a - %b %d, %Y")
         return v
     else:
@@ -18,8 +21,24 @@ def format_date(d):
 
 @bp.route("/search/<field>/<value>")
 def search(field, value):
-    # TBD
-    return ""
+    conn=db.get_db()
+    cursor=conn.cursor()
+    oby=request.args.get("order_by","id")
+    order=request.args.get("order","asc")
+
+    if order not in ['desc','asc']:
+        order='asc'
+
+    if field=='tag':
+        cursor.execute(f""" select p.id,p.name,p.bought,p.sold,a.name from pet p, animal a,tag t,tags_pets tpet where
+                        p.species=a.id and tpet.pet=p.id and tpet.tag=t.id and t.name=? order by p.{oby} {order}""",[value])
+    else:
+        cursor.execute(f"""select p.id,p.name,p.bought,p.sold,a.name from pet p,animal a
+                        where p.{field}=? order by p.{oby} {order}""",[value])
+
+    pets=cursor.fetchall()
+
+    return render_template('search.html',pets=pets,field=field,value=value,order='asc' if order=="desc" else "desc")
 
 @bp.route("/")
 def dashboard():
@@ -74,7 +93,8 @@ def edit(pid):
     elif request.method == "POST":
         description = request.form.get('description')
         sold = request.form.get("sold")
-        # TODO Handle sold
+        cursor.execute(f"""update pet set description = ? , sold= ? where id = ? """,[description,sold,pid])
+        conn.commit()
         return redirect(url_for("pets.pet_info", pid=pid), 302)
         
     
